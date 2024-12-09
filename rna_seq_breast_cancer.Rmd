@@ -1,0 +1,36 @@
+---
+title: "RNA-Seq Breast Cancer Analysis"
+author: "Thieu Nguyen"
+date: "11/8/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Download data 
+Data is downloaded from https://www.ebi.ac.uk/ena/browser/view/. There are 3 rna-seq files from tumor tissue samples and 3 file from normal tissue samples that are fastq files.
+
+The output files are:
+
+![](/Users/nnthieu/rnaseq/p1.jpg){width=60% height=250px}
+
+```{r eval=FALSE, include=TRUE}
+system("wget \
+-O "/Users/nnthieu/genome_ref/gtf/hg38.ncbiRefSeq.gtf.gz" \
+"https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ncbiRefSeq.gtf.gz" ")
+
+system("gzip -d /Users/nnthieu/genome_ref/gtf/hg38.ncbiRefSeq.gtf.gz ")
+
+```
+
+## Indexing reference files using STAR.
+
+It takes so long time to run this STAR funtionc.For indexing the human genome, STAR may require more than 32GB of RAM and it may take a long time depending on the computer RAM and the number of processors used.
+
+```{r  eval=FALSE, include=TRUE}
+
+```
+
+
