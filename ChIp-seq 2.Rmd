@@ -1,0 +1,478 @@
+---
+title: "ChIP-seq Data Analysis-Part 2-Visualizing Using Genome Browsers and R"
+author: "Thieu Nguyen"
+date: "2024-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+R packages needed for visualizing ChIP-seq data
+
+```{r eval=FALSE, include=TRUE}
+library(clusterProfiler)
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(EnsDb.Hsapiens.v75)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(dplyr)
+library(ComplexHeatmap)
+library(circlize) 
+library(GenomicRanges)
+library(GenomicFeatures)
+
+```
+
+## 1. Convert files for visualizing
+
+The converted files were saved in “macs3output/vis” directory as shown in Figure 6.5. Those files can be visualized in a genome browser.
+
+#### Packages needed to convert files 
+
+```{r eval=FALSE, include=TRUE}
+
+# Download files converters
+system(" conda install -c bioconda ucsc-bedGraphToBigWig")
+system(" conda install -c bioconda ucsc-bigWigToWig")
+system(" conda install -c bioconda ucsc-fetchchromsizes")
+
+```
+
+Convert to other files
+
+#### Convert *control_lambda.bdg from bedGraph to BigWig
+
+```{r eval=FALSE, include=TRUE}
+system("mkdir vis")
+
+system("bedGraphToBigWig \
+    chip1_control_lambda.bdg hg19.chrom.sizes \
+    ./vis/chip1_control_lambda.bw")
+
+system("bedGraphToBigWig \
+    chip2_control_lambda.bdg hg19.chrom.sizes \
+    ./vis/chip2_control_lambda.bw")
+    
+system("bedGraphToBigWig \
+    chip3_control_lambda.bdg hg19.chrom.sizes \
+    ./vis/chip3_control_lambda.bw")
+
+```
+
+
+#### Convert *treat_pileup.bdg from bedGraph to BigWig
+
+
+```{r eval=FALSE, include=TRUE}
+system("bedGraphToBigWig \
+    chip1_treat_pileup.bdg \
+    hg19.chrom.sizes \
+    ./vis/chip1_treat_pileup.bw")
+
+system("bedGraphToBigWig \
+    chip2_treat_pileup.bdg \
+    hg19.chrom.sizes \
+    ./vis/chip2_treat_pileup.bw")
+
+system("bedGraphToBigWig \
+    chip3_treat_pileup.bdg \
+    hg19.chrom.sizes \
+    ./vis/chip3_treat_pileup.bw")
+```
+
+#### Convert control_lambda.bw from Bigwig to wig
+
+
+```{r eval=FALSE, include=TRUE}
+system("bigWigToWig \
+    ./vis/chip1_control_lambda.bw \
+    ./vis/chip1_control_lambda.wig")
+    
+system("bigWigToWig \
+    ./vis/chip2_control_lambda.bw \
+    ./vis/chip2_control_lambda.wig")
+
+system("bigWigToWig \
+    ./vis/chip3_control_lambda.bw \
+    ./vis/chip3_control_lambda.wig")
+
+```
+
+#### Convert chip1_treat_pileup.bw from Bigwig to wig
+
+```{r eval=FALSE, include=TRUE}
+system("bigWigToWig \
+    ./vis/chip1_treat_pileup.bw \
+    ./vis/chip1_treat_pileup.wig")
+
+system("bigWigToWig \
+    ./vis/chip2_treat_pileup.bw \
+    ./vis/chip2_treat_pileup.wig")
+
+system("bigWigToWig \
+    ./vis/chip3_treat_pileup.bw \
+    ./vis/chip3_treat_pileup.wig")
+
+```
+
+#### modify the BED file “peaks.narrowPeak” by keeping only columns 1–4
+
+```{r eval=FALSE, include=TRUE}
+system("cut -f1,2,3,4 chip1_peaks.narrowPeak > ./vis/chip1_peaks.bed")
+system("cut -f1,2,3,4 chip2_peaks.narrowPeak > ./vis/chip2_peaks.bed")
+system("cut -f1,2,3,4 chip2_peaks.narrowPeak > ./vis/chip3_peaks.bed")
+```
+
+## 2. Visualizing ChIP-Seq data
+
+### Visualizing ChIP-Seq Enrichment Using Genome Browsers
+
+Wig and BED files ready to be visualized in a genome browser: IGB
+
+![](/Users/nnthieu/chipseq/p1.jpg)
+
+### Visualizing ChIP-Seq peak distribution Using R packages
+
+#### ChIP-Seq Peaks’ Coverage Plot
+
+```{r eval=FALSE, include=TRUE}
+peaks1 <- read.table("/Users/nnthieu/chipseq/macs3output/chip1_peaks.narrowPeak",header=FALSE)
+colnames <- c("chrom", "start", "end", "name", "score","strand",
+               "signal", "pvalue", "qvalue", "peak")
+
+colnames(peaks1) <- colnames
+
+peaks2<- read.table("/Users/nnthieu/chipseq/macs3output/chip2_peaks.narrowPeak",header=FALSE)
+colnames(peaks2) <- colnames
+colnames(peaks2)
+
+peaks3<- read.table("/Users/nnthieu/chipseq/macs3output/chip3_peaks.narrowPeak",header=FALSE)
+colnames(peaks3) <- colnames
+colnames(peaks3)
+```
+
+Visualizing Peaks Distribution
+
+```{r eval=FALSE, include=TRUE}
+#head(peaks1)
+peaks1Ranges<- GRanges(seqnames=peaks1$chrom,
+                       ranges=IRanges(peaks1$start,peaks1$end),
+                       peaks1$name,
+                       peaks1$score,
+                       strand=NULL,
+                       peaks1$signal,
+                       peaks1$pvalue,
+                       peaks1$qvalue,
+                       peaks1$peak)
+covplot(peaks1Ranges, weightCol="peaks1$peak")
+
+peaks2Ranges<- GRanges(seqnames=peaks2$chrom,
+                       ranges=IRanges(peaks2$start,peaks2$end),
+                       peaks2$name,
+                       peaks2$score,
+                       strand=NULL,
+                       peaks2$signal,
+                       peaks2$pvalue,
+                       peaks2$qvalue,
+                       peaks2$peak)
+covplot(peaks2Ranges, weightCol="peaks2$peak")
+
+peaks3Ranges<- GRanges(seqnames=peaks3$chrom,
+                       ranges=IRanges(peaks3$start,peaks3$end),
+                       peaks3$name,
+                       peaks3$score,
+                       strand=NULL,
+                       peaks3$signal,
+                       peaks3$pvalue,
+                       peaks3$qvalue,
+                       peaks3$peak)
+covplot(peaks3Ranges, weightCol="peaks3$peak")
+```
+
+#### Peaks coverage between positions
+```{r eval=FALSE, include=TRUE}
+covplot(peaks1Ranges, weightCol="peaks1$peak", 
+        chrs=c("chr1", "chr2"), xlim=c(1.0e8, 1.5e8))
+```
+
+#### Distribution of Peaks in Transcription Start Site (TSS) Regions
+
+```{r eval=FALSE, include=TRUE}
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+promoter <- getPromoters(TxDb=txdb, upstream=2000, downstream=2000)
+
+tagMatrix <- getTagMatrix(peaks1Ranges, windows=promoter)
+
+# Convert tagMatrix to a numeric matrix
+tagMatrixNumeric <- as.matrix(tagMatrix)
+
+# Define a custom color scheme
+customColors <- colorRamp2(c(min(tagMatrixNumeric), max(tagMatrixNumeric)), c("white", "blue"))
+
+ht_opt$message = FALSE
+
+# Plot a heatmap
+Heatmap(tagMatrixNumeric, col = customColors, name = "Signal Intensity", 
+        cluster_rows = FALSE, cluster_columns = FALSE)
+
+plotAvgProf(tagMatrix, xlim=c(-2000, 2000),
+            xlab="Genomic Region (5'->3')",
+            ylab = "Read Count Frequency")
+```
+
+
+#### Profile of Peaks along Gene Regions
+
+```{r eval=FALSE, include=TRUE}
+plotPeakProf2(peak = peaks1Ranges, upstream = rel(0.2), downstream
+              = rel(0.2),
+              conf = 0.95, by = "gene", type = "body", nbin = 800, TxDb = txdb,
+              weightCol = "peaks1$peak",ignore_strand = F)
+```
+
+#### Peak Annotation
+
+```{r eval=FALSE, include=TRUE}
+# List all .bed files in the 'vis' directory
+bedfiles <- list.files(path = "/Users/nnthieu/chipseq/macs3output/vis", 
+              pattern = "\\.bed$", full.names = TRUE)
+
+bedfiles <- as.list(bedfiles)
+names(bedfiles) <- c("chip1", "chip2", "chip3")
+print(bedfiles)
+
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+annotated_peaks <- lapply(bedfiles,
+              annotatePeak,
+              TxDb=txdb,
+              tssRegion=c(-1000, 1000), verbose=FALSE)
+
+annotated_peaks
+
+plotAnnoBar(annotated_peaks)
+
+plotDistToTSS(annotated_peaks,
+              title="Distribution of Poly II relative to TSS")
+```
+
+#### Writing Annotations to Files
+
+```{r eval=FALSE, include=TRUE}
+#Write Chip1 annotation to a file
+#separate Chip1 annotation in a data frame
+chip1_annot <- data.frame(annotated_peaks[["chip1"]]@anno)
+head(chip1_annot)
+
+#get the NCBI Entrez IDs
+entrez1 <- chip1_annot$geneId
+head(entrez1)
+
+# Obtain the gene symbols for the set of Entrez IDs from the database
+annotations_edb1 <- AnnotationDbi::select(EnsDb.Hsapiens.v75,
+              keys = entrez1,
+              columns = c("GENENAME"),
+              keytype = "ENTREZID")
+head(annotations_edb1)
+
+#Convert IDs to character type to merge
+annotations_edb1$ENTREZID <- as.character(annotations_edb1$ENTREZID)
+
+# Write Chip1 annotation to file
+chip1_annot %>% left_join(annotations_edb1,
+              by=c("geneId"="ENTREZID")) %>%
+              write.table(file="/Users/nnthieu/chipseq/macs3output/Chip1_peak_annotation.txt",
+              sep="\t", quote=F, row.names=F)
+
+# Write Chip2 annotation to a file
+chip2_annot <- data.frame(annotated_peaks[["chip2"]]@anno)
+entrez2 <- chip2_annot$geneId
+annotations_edb2 <- AnnotationDbi::select(EnsDb.Hsapiens.v75,
+              keys = entrez2,
+              columns = c("GENENAME"),
+              keytype = "ENTREZID")
+
+annotations_edb2$ENTREZID <- as.character(annotations_edb2$ENTREZID)
+
+chip2_annot %>% left_join(annotations_edb2,
+              by=c("geneId"="ENTREZID")) %>%
+              write.table(file="/Users/nnthieu/chipseq/macs3output/Chip2_peak_annotation.txt",
+              sep="\t", quote=F, row.names=F)
+
+# Write Chip3 annotation to a file
+chip3_annot <- data.frame(annotated_peaks[["chip3"]]@anno)
+entrez3 <- chip3_annot$geneId
+annotations_edb3 <- AnnotationDbi::select(EnsDb.Hsapiens.v75,
+              keys = entrez3,
+              columns = c("GENENAME"),
+              keytype = "ENTREZID")
+
+annotations_edb3$ENTREZID <- as.character(annotations_edb3$ENTREZID)
+chip3_annot %>% left_join(annotations_edb3,
+              by=c("geneId"="ENTREZID")) %>%
+              write.table(file="/Users/nnthieu/chipseq/macs3output/Chip3_peak_annotation.txt",
+              sep="\t", quote=F, row.names=F)
+```
+
+#### ChIP-Seq Functional Analysis
+
+```{r eval=FALSE, include=TRUE}
+ego1 <- enrichGO(gene = entrez1,
+                 keyType = "ENTREZID",
+                 OrgDb = org.Hs.eg.db,
+                 ont = "BP",
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 readable = TRUE)
+
+ego2 <- enrichGO(gene = entrez2,
+                 keyType = "ENTREZID",
+                 OrgDb = org.Hs.eg.db,
+                 ont = "BP",
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 readable = TRUE)
+
+ego3 <- enrichGO(gene = entrez3,
+                 keyType = "ENTREZID",
+                 OrgDb = org.Hs.eg.db,
+                 ont = "BP",
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 readable = TRUE)
+
+#GO output
+# Chip1
+cluster_summary1 <- data.frame(ego1)
+write.csv(cluster_summary1, "/Users/nnthieu/chipseq/macs3output/chip1_GO.csv")
+
+# Dotplot visualization
+dotplot(ego1, showCategory=10)
+
+# Chip2
+cluster_summary2 <- data.frame(ego2)
+write.csv(cluster_summary2, "/Users/nnthieu/chipseq/macs3output/chip2_GO.csv")
+
+# Dotplot visualization
+dotplot(ego2, showCategory=10)
+
+# Chip3
+cluster_summary3 <- data.frame(ego3)
+write.csv(cluster_summary3, "/Users/nnthieu/chipseq/macs3output/chip3_GO.csv")
+
+# Dotplot visualization
+dotplot(ego3, showCategory=10)
+```
+
+#### KEGG database for gene pathways to annotate the genes with significant peaks.               
+
+```{r eval=FALSE, include=TRUE}
+#Chip1                
+ekegg1 <- enrichKEGG(gene = entrez1, organism = 'hsa',
+                     pvalueCutoff = 0.05)
+cluster_kegg1 <- data.frame(ekegg1)
+write.csv(cluster_kegg1, "/Users/nnthieu/chipseq/macs3output/kegg_chip1.csv")
+dotplot(ekegg1)
+
+#Chip2
+ekegg2 <- enrichKEGG(gene = entrez2, organism = 'hsa',
+                     pvalueCutoff = 0.05)
+cluster_kegg2 <- data.frame(ekegg2)
+write.csv(cluster_kegg2, "/Users/nnthieu/chipseq/macs3output/kegg_chip2.csv")
+dotplot(ekegg2)
+
+#Chip3
+ekegg3 <- enrichKEGG(gene = entrez3, organism = 'hsa',
+                     pvalueCutoff = 0.05)
+cluster_kegg3 <- data.frame(ekegg3)
+write.csv(cluster_kegg3, "/Users/nnthieu/chipseq/macs3output/kegg_chip3.csv")
+dotplot(ekegg3)
+```
+
+#### Create a list with genes from each sample
+
+```{r eval=FALSE, include=TRUE}
+genes = lapply(annotated_peaks, function(i) as.data.frame(i)$geneId)
+# Run KEGG analysis
+compKEGG <- compareCluster(geneCluster = genes,
+                           fun = "enrichKEGG",
+                           organism = "human",
+                           pvalueCutoff = 0.05,
+                           pAdjustMethod = "BH")
+
+dotplot(compKEGG, showCategory = 10, title = "KEGG Pathway Enrichment Analysis")
+
+```
+
+## 5. Motif Discovery
+
+can create BED files by extracting the first three columns from “*peaks.narrowPeak” files as follows:
+
+```{r eval=FALSE, include=TRUE}
+system("mkdir motifs")
+system("cut -f 1,2,3 ./macs3output/chip1_peaks.narrowPeak > ./motifs/chip1_peaks.bed")
+
+system("cut -f 1,2,3 ./macs3output/chip2_peaks.narrowPeak > ./motifs/chip2_peaks.bed")
+
+system("cut -f 1,2,3 ./macs3output/chip3_peaks.narrowPeak > ./motifs/chip3_peaks.bed")
+```
+
+#### extract a FASTA file from each BED file
+
+The “bedtools getfasta” command is used to extract a FASTA file from each BED file.
+This command requires the FASTA file of the reference sequence and a bed file as input.
+
+```{r eval=FALSE, include=TRUE}
+system("bedtools getfasta \
+-fi /Users/nnthieu/genome_ref/hg19/hg19.fa \
+-bed /Users/nnthieu/chipseq/motifs/chip1_peaks.bed \
+-fo /Users/nnthieu/chipseq/motifs/chip1_peaks.fasta")
+
+system("bedtools getfasta \
+-fi /Users/nnthieu/genome_ref/hg19//hg19.fa \
+-bed /Users/nnthieu/chipseq/motifs/chip2_peaks.bed \
+-fo /Users/nnthieu/chipseq/motifs/chip2_peaks.fasta")
+
+system("bedtools getfasta \
+-fi /Users/nnthieu/genome_ref/hg19//hg19.fa \
+-bed /Users/nnthieu/chipseq/motifs/chip3_peaks.bed \
+-fo /Users/nnthieu/chipseq/motifs/chip3_peaks.fasta")
+```
+
+Motif calling using DREME resulting in files of dreme.html, dreme.txt and dreme.xml.
+
+
+```{r eval=FALSE, include=TRUE}
+
+system("dreme -verbosity 2 \
+-oc dreme_motifs_chip1 \
+-dna \
+-p chip1_peaks.fasta \
+-t 14400 \
+-e 0.05")
+
+system("dreme -verbosity 2 \
+-oc dreme_motifs_chip2 \
+-dna \
+-p chip2_peaks.fasta \
+-t 14400 \
+-e 0.05")
+
+system("dreme -verbosity 2 \
+-oc dreme_motifs_chip3 \
+-dna \
+-p chip3_peaks.fasta \
+-t 14400 \
+-e 0.05")
+
+```
+
+
+
+<iframe src="/Users/nnthieu/chipseq/motifs/dreme_motifs_chip1/dreme.html" width="100%" height="600px"></iframe>
+
+
+#-----

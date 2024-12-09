@@ -1,0 +1,29 @@
+---
+title: "SEQUENCING DATA FASTQ QUALITY CHECK WITH FASTQC"
+author: "Thieu Nguyen"
+date: "9/2/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Package needed for loading html file:
+
+{r echo=FALSE, results='asis'}
+
+library(shiny)
+
+includeHTML("/Users/nnthieu/fastqs/SRR576933_Quality Check.html")
+
+
+```{r }
+```{r echo=FALSE, results='asis'}
+library(shiny)
+includeHTML("/Users/nnthieu/fastqs/SRR576933_Quality Check.html")
+
+
+
+```
+

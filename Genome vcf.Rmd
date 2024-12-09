@@ -1,0 +1,194 @@
+---
+title: "Genome Analysis Using vcf File"
+author: "Thieu Nguyen"
+date: "8/4/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data 
+
+I download data from "1000 Genome Projects" in format of vcf.gz file: CEU.trio.2010_03.genotypes.vcf.gz 
+
+```{r , ECHO = FALSE}
+library(tidyverse)
+library(vcfR)
+library(adegenet)
+library(poppr)
+library(snpStats)
+library(qqman)
+library(data.table)
+```
+
+Reading data
+
+```{r }
+# Specify the path to your VCF file
+file_path <- "/Users/nnthieu/Downloads/GenomeProject1000/CEU.trio.2010_03.genotypes.vcf.gz"
+# Read the VCF file
+vcf <- read.vcfR(file_path)
+```
+
+## Summarize data
+
+```{r}
+# View the metadata
+# print(vcf@meta)
+summary(vcf)
+print(dim(vcf))
+print(head(vcf))
+```
+
+Data is also be seen separately
+
+```{r}
+# View the fixed fields
+print(head(vcf@fix))
+# View the genotype data
+print(head(vcf@gt))
+```
+
+```{r}
+# Check if QUAL is all NA
+if(all(is.na(vcf@fix[, "QUAL"]))) {
+  cat("All QUAL values are NA.\nProceeding without QUAL filtering.\n")
+}
+```
+
+Separately load genotype and phenotype file 
+
+## Access and inspect the genotype data
+
+```{r}
+genotype_data <- vcf@gt
+head(genotype_data)
+```
+
+Extract Chromosome names
+
+```{r}
+chrom_names <- unique(vcf@fix[, "CHROM"])
+print(chrom_names)
+
+```
+
+The subject is female.
+Get the genotype data
+
+```{r}
+geno <- extract.gt(vcf)
+head(geno)
+```
+
+Convert genotype data to numeric format (example function from previous discussions)
+
+```{r}
+convert_genotype <- function(gt) {
+  if (is.na(gt)) {
+    return(NA)
+  }
+  switch(gt,
+         "0/0" = 0,
+         "0/1" = 1,
+         "1/0" = 1,
+         "1/1" = 2,
+         "0|0" = 0,
+         "0|1" = 1,
+         "1|0" = 1,
+         "1|1" = 2,
+         NA)
+}
+
+```
+
+Apply the convert_genotype function to each element in the vector
+
+```{r}
+geno_numeric <- apply(geno, c(1, 2), convert_genotype)
+print(head(geno_numeric))
+```
+
+```{r}
+calculate_allele_frequencies <- function(geno_numeric) {
+  total_alleles <- 2 * ncol(geno_numeric)  # Each individual has 2 alleles
+  allele_counts <- rowSums(geno_numeric, na.rm = TRUE)
+  
+  # Calculate frequency of allele '1'
+  freq_1 <- allele_counts / total_alleles
+  freq_0 <- 1 - freq_1  # Frequency of allele '0'
+  
+  return(data.frame(freq_0 = freq_0, freq_1 = freq_1))}
+
+allele_frequencies <- calculate_allele_frequencies(geno_numeric)
+print(allele_frequencies)
+```
+
+```{r}
+# Remove constant or zero variance columns
+geno_numeric_complete <- geno_numeric[, apply(geno_numeric, 2, function(col) length(unique(col[!is.na(col)])) > 1)]
+
+# Check for any remaining constant columns
+constant_columns <- apply(geno_numeric_complete, 2, function(col) length(unique(col[!is.na(col)])) == 1)
+print(constant_columns)
+
+```
+
+```{r}
+# Perform PCA
+pca <- prcomp(geno_numeric_complete, scale. = TRUE)
+summary(pca)
+```
+
+```{r}
+# Create a data frame for PCA results
+pca_df <- data.frame(PC1 = pca$x[,1], PC2 = pca$x[,2])
+
+# Plot PCA
+ggplot(pca_df, aes(x = PC1, y = PC2)) +
+  geom_point() +
+  theme_minimal() +
+  labs(title = "PCA of Genotypes", x = "Principal Component 1", y = "Principal Component 2")
+```
+
+
+```{r}
+library(traits)
+seqs <- ncbi_byid(ids = "NM_058137.6", verbose = TRUE)
+# seqs <- ncbi_byid(ids = c("AJ53487.1", "NM_058137.6"), verbose = TRUE)
+seq_data <- seqs$sequence
+# print(paste(seqs$gene_desc, seqs$sequence))
+head(seq_data)
+summary(seqs)
+```
+
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.18")
+source("http://bioconductor.org/biocLite.R")
+```
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("phangorn")
+
+```
+
+
+```{r}
+library(ape)
+library(phangorn)
+alignment <- read.dna("/Users/nnthieu/Download/clustalo-I20240826-081537-0648-80894241-p1m.aln-fasta",format ="fasta")
+dist_matrix <- dist.dna(alignment)
+tree <- nj(dist_matrix)
+plot(tree, main = "Phylogenetic Tree")
+```
+
+
+
+

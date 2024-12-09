@@ -1,0 +1,117 @@
+---
+title: "Fix DADA2 Errors Related to Loading Rcpp in R"
+author: "Thieu Nguyen"
+date: "2024-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Dada2 is a plugin from QIIME2 needed for targeted gene metagenomic data analysis (16S sequencing). I have errors when running dada2. The error messeage is:
+
+## "An error was encountered while running DADA2 in R"
+
+I want to run these codes
+
+```{r eval=FALSE, include=TRUE}
+system("qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left 13 \
+  --p-trunc-len 150 \
+  --o-representative-sequences asv-sequences.qza \
+  --o-table asv-table.qza \
+  --o-denoising-stats denoising-stats.qza \
+  --verbose")
+```
+
+However, an error happens:
+
+R version 4.4.2 (2024-10-31) 
+
+Loading required package: Rcpp
+
+Error: package or namespace load failed for ‘Rcpp’ in library.dynam(lib, package, package.lib): shared object ‘Rcpp.so’ not found
+
+Error: package ‘Rcpp’ could not be loaded
+
+.....
+
+Plugin error from dada2:
+
+An error was encountered while running DADA2 in R (return code 1), please inspect stdout and stderr to learn more.
+
+I check errors in Rstudio but everything is OK. So the errors come from loading R in Terminal.
+
+## Fixing errors
+
+The error indicates that 'Rcpp' and its dependencies are not installed properly. I need to install Rcpp's dependencies one by one as follow: 
+
+The place I install dada2 is in the Terminal of Macbook, not in RStudio.
+
+Open Terminal and activate 'qiime2-amplicon-2024.10'
+
+NOTE: DO NOT TYPE 'system(" ")' IN TERMINAL, just type the codes in double quotes " " of the phrase 'system(" ")'. For examples:
+
+conda activate qiime2-amplicon-2024.10
+
+```{r eval=FALSE, include=TRUE}
+system("conda activate qiime2-amplicon-2024.10")
+```
+
+Then open R in 'qiime2-amplicon-2024.10' by typing 'R'
+
+```{r eval=FALSE, include=TRUE}
+system("R")
+```
+
+Now, in R in (qiime2-amplicon-2024.10) nnthieu@192 data %,
+I install dependencies needed.
+
+
+```{r eval=FALSE, include=TRUE}
+BiocManager::install("Rcpp", force=TRUE)
+
+# then check dada2 loading
+library(dada2)
+```
+
+I face another error related to other dependencies like 'reshape2.so not found'.
+I continue to install dependencies as above
+
+
+```{r eval=FALSE, include=TRUE}
+BiocManager::install("reshape2", force=TRUE)
+
+# then check dada2 loading
+library(dada2)
+```
+
+Until dada2 can be loaded normally as
+
+
+> library(dada2)
+
+Loading required package: Rcpp
+
+
+OK, it is good now.
+
+## Run dada2 again
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left 13 \
+  --p-trunc-len 150 \
+  --o-representative-sequences asv-sequences.qza \
+  --o-table asv-table.qza \
+  --o-denoising-stats denoising-stats.qza ")
+```
+
+Now dada2 works properly.
+
+-------
+
