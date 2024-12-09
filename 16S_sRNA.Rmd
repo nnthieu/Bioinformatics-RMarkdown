@@ -1,0 +1,741 @@
+---
+title: "16S rRNA Sequencing Data Analysis Using QIIME2"
+author: "Thieu Nguyen"
+date: "2024-11-26"
+output: 
+  html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages needed
+
+qiime2 needed to do analysis with 16s sRNA data.
+
+reference: 
+
+https://data.qiime2.org/distro/amplicon/qiime2-amplicon-2024.10-py310-osx-conda.yml
+
+https://docs.qiime2.org/2024.10/install/native/#install-qiime-2-within-a-conda-environment
+
+https://view.qiime2.org
+
+```{r eval=FALSE, include=TRUE}
+
+system("conda env create -n qiime2-amplicon-2024.10 --file https://data.qiime2.org/distro/amplicon/qiime2-amplicon-2024.10-py310-osx-conda.yml")
+
+system("conda activate qiime2-amplicon-2024.10")
+
+```
+
+## Download data
+
+The NCBI BioProject accession for this study is PRJEB24421. I will download the
+FASTQ files from the NCBI SRA database
+
+```{r eval=FALSE, include=TRUE}
+
+system("mkdir samples")
+system("prefetch --option-file runids.txt")
+
+#moving *.sralite files in sra floders to 'samples' directory
+system("for folder in ERR*; do
+    if [ -d "$folder" ]; then
+        mv "$folder"/*.sralite ../samples
+    fi
+done")
+
+```
+
+## Convert sralite files into fastq files
+
+You can also embed plots, for example:
+
+```{r eval=FALSE, include=TRUE}
+
+system("cd samples")
+system("for file in *.sralite; do
+    fastq-dump --split-files --gzip '$file'
+done")
+
+```
+
+
+## Import the 172 FASTQ files onto a single QIIME2 artifact
+
+Import the 172 FASTQ files onto a single QIIME2 artifact “demux-yoga.qza” in the “inputs” directory. All the raw FASTQ files are contained in a single QIIME2 artifact. The next step would be data preprocessing, which includes quality control and denoising.
+
+#### Create manifest.tsv
+
+```{r}
+#a- make file name and absolute path
+system("find “$PWD”/*.fastq -type f -printf ‘%f %h/%f\n’ > tmp.txt")
+
+#b- remove _1/2.fastq
+system("awk ‘{ gsub(/_[12].fastq/,”,”, $1); print } ‘ tmp.txt > tmp2.txt")
+
+#remove space
+system("cat tmp2.txt | sed -r ‘s/\s+//g’ > tmp3.txt")
+system("n=$(ls -l *1.fastq|wc -l) ")
+
+#create a direction column
+system("seq $n | sed “c forward\nreverse” > tmp4.txt")
+
+#add direction column
+system("paste tmp3.txt tmp4.txt | column -s $’’ -t > tmp5.txt")
+
+#replace space with comma
+system("sed -e ‘s/\s\+/,/g’ tmp5.txt > manifest.txt")
+
+#add column names
+system("sed -i ‘1s/^/sample-id,absolute-filepath,direction\n/’ manifest.txt")
+system("rm tmp*.txt")
+```
+
+#### Import file with manifest.tsv or .txt
+
+```{r eval=FALSE, include=TRUE}
+#system("conda activate qiime2-amplicon-2024.10")
+       
+system("qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-format PairedEndFastqManifestPhred33 \
+--input-path ./data/manifest.txt \
+--output-path ./inputs/demux-yoga.qza")
+```
+
+Check type of demux-yoga.qza
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools peek /Users/nnthieu/16sRna/demux-yoga.qza")
+```
+
+UUID:        3bcbf103-7adc-4f3f-9b4a-110aa7823c3d
+Type:        SampleData[PairedEndSequencesWithQuality]
+Data format: SingleLanePerSamplePairedEndFastqDirFmt
+
+#### Use EDirect to create sample-metadara.tsv
+
+```{r eval=FALSE, include=TRUE}
+system("esearch -db sra -query 'PRJEB24421[bioproject]' \
+| efetch -format runinfo \
+| tr -s ',' '\t' > sample-metadata.tsv")
+
+```
+
+## Raw Data Preprocessing
+
+Create the report visualization file
+
+```{r eval=FALSE, include=TRUE}
+
+system("mkdir viz")
+
+system("qiime demux summarize \
+--i-data ./inputs/demux-yoga.qza \
+--o-visualization ./viz/demux-yoga-qc.qzv")
+
+```
+
+Check 'viz' if the demux-yog.qza is created instead of demux-yoga-qc.qza file name.
+
+Dispay the visualization file then save it as .html file
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools view ./viz/demux-yoga-qc.qzv")
+system("qiime tools export --input-path ./viz/demux-yoga-qc.qzv --output-path ./viz")
+
+```
+
+Display output HTML File 
+
+overview page: 
+
+<iframe src="/Users/nnthieu/16sRna/viz/q2_demux_summarize1.pdf" width="100%" height="450px"></iframe>
+
+interactive page:
+
+<iframe src="/Users/nnthieu/16sRna/viz/q2_demux_summarize2.pdf" width="100%" height="450px"></iframe>
+
+
+#### Filter and trim for single end reads
+
+For paired end reads, filter after join reads.
+
+```{r eval=FALSE, include=TRUE}
+
+system("cd inputs")
+# Filter
+system("qiime quality-filter q-score \
+--i-demux ./demux-yoga.qza \
+--p-min-quality 20 \
+--p-quality-window 5 \
+--p-min-length-fraction 0.8 \
+--p-max-ambiguous 0 \
+--o-filtered-sequences ./demux-filtered.qza \
+--o-filter-stats ./demux-filter-stats.qza")
+
+# Trimm for adapters sequences
+system("qiime cutadapt trim-single \
+--i-demultiplexed-sequences demux.qza \
+--p-front GTGCCAGCMGCCGCGGTAA \
+--p-error-rate 0 \
+--o-trimmed-sequences trimmed-demux.qza \
+--verbose")
+```
+
+## Clustering and Denoising with QIIME2
+
+To create features by clustering or denoising reads
+
+#### Merging Paired-End Reads before clustering 
+
+```{r eval=FALSE, include=TRUE}
+system("qiime vsearch merge-pairs \
+--i-demultiplexed-seqs ./inputs/demux-yoga.qza \
+--p-allowmergestagger \
+--o-merged-sequences ./inputs/demux-yoga-merged.qza \
+--o-unmerged-sequences ./inputs/demux-yoga-unmerged.qza")
+
+```
+
+Check the output files
+
+```{r eval=FALSE, include=TRUE}
+system("qiime demux summarize \
+--i-data ./inputs/demux-yoga-merged.qza \
+--o-visualization ./viz/demux-yoga-merged-qc.qzv")
+
+```
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools view viz/demux-yoga-merged-qc.qzv")
+
+```
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools export --input-path ./viz/demux-yoga-merged-qc.qzv --output-path ./viz")
+
+```
+
+Display output HTML File 
+
+overview page: 
+
+<iframe src="/Users/nnthieu/16sRna/viz/q2_demux_summarize_merged1.pdf" width="100%" height="450px"></iframe>
+
+interactive page:
+
+<iframe src="/Users/nnthieu/16sRna/viz/q2_demux_summarize_merged2.pdf" width="100%" height="450px"></iframe>
+
+#### Filter for low quality reads
+
+```{r eval=FALSE, include=TRUE}
+system("qiime quality-filter q-score \
+--i-demux ./inputs/demux-yoga-merged.qza \
+--o-filtered-sequences ./inputs/demux-yoga-merged-filter.qza \
+--o-filter-stats ./inputs/demux-yoga-merged-filter-stats.qza")
+
+```
+
+#### Sequence Dereplication
+
+```{r eval=FALSE, include=TRUE}
+system("qiime vsearch dereplicate-sequences \
+--i-sequences ./inputs/demux-yoga-merged.qza \
+--o-dereplicated-table ./inputs/derep-yoga-table.qza \
+--o-dereplicated-sequences ./inputs/derep-yoga-seqs.qza")
+
+```
+
+## Clustering 
+
+#### De Novo Clustering
+
+The outputs are two artifacts: a feature table for the OTUs and feature data that contains the centroid sequences defining each OTU cluster. De novo clustering usually consumes more computational resources compared to the other two methods. It takes more than 4 hours to complete with my macbook of 16 GB of RAM.
+
+```{r eval=FALSE, include=TRUE}
+system("qiime vsearch cluster-features-de-novo \
+--i-table ./inputs/derep-yoga-table.qza \
+--i-sequences ./inputs/derep-yoga-seqs.qza \
+--p-perc-identity 0.99 \
+--o-clustered-table ./denovo/table-yoga-denovo.qza \
+--o-clustered-sequences ./denovo/rep-seqs-yoga-denovo.qza")
+
+```
+
+#### Closed-Reference Clustering
+
+Download reference sequences
+
+```{r eval=FALSE, include=TRUE}
+system(" wget ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_8_otus.tar.gz")
+system("tar vxf gg_13_8_otus.tar.gz")
+system("rm gg_13_8_otus.tar.gz")
+
+```
+
+Import reference sequence
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools import \
+--type 'FeatureData[Sequence]' \
+--input-path /Users/nnthieu/genome_ref/gg13.8/gg_13_8_otus/rep_set/97_otus.fasta \
+--output-path ./inputs/97_otus-GG_db.qza")
+```
+
+Closed-Reference Clustering 
+
+
+```{r eval=FALSE, include=TRUE}
+
+system(" qiime vsearch cluster-features-closed-reference \
+--i-table ./inputs/derep-yoga-table.qza \
+--i-sequences ./inputs/derep-yoga-seqs.qza \
+--i-reference-sequences ./inputs/97_otus-GG_db.qza \
+--p-perc-identity 0.97 \
+--o-clustered-table ./closed_ref_cl_97/table-yoga-closed_cl.qza \
+--o-clustered-sequences ./closed_ref_cl_97/rep-seqs-yoga-close_cl.qza \
+--o-unmatched-sequences ./closed_ref_cl_97/unmatched-yoga-close_cl.qza ")
+
+```
+
+#### Open-Reference Clustering
+
+The open-reference clustering is hybrid of the above two clustering methods. First, it uses reference sequences for clustering the matched sequences and then it performs de novo clustering on the unmatched sequences.
+
+```{r eval=FALSE, include=TRUE}
+
+system(" mkdir open_ref_cl_97")
+
+system(" qiime vsearch cluster-features-open-reference \
+--i-table ./inputs/derep-yoga-table.qza \
+--i-sequences ./inputs/derep-yoga-seqs.qza \
+--i-reference-sequences ./inputs/97_otus-GG_db.qza \
+--p-perc-identity 0.97 \
+--o-clustered-table ./open_ref_cl_97/table-yoga-open_cl.qza.qza \
+--o-clustered-sequences ./open_ref_cl_97/rep-seqs-yoga-open_cl.qza \
+--o-new-reference-sequences ./open_ref_cl_97/new-ref-seqs-open_cl.qza")
+
+```
+
+The three clustering methods use dereplicated feature table and representative sequences and produce a final feature table and OTU representative sequences to be used in the downstream analysis for phylogeny, diversity analysis, assignment of taxonomic group, and differential taxonomic analysis.
+
+## Denoising
+
+Like clustering, denoising also produces a feature table and representative sequences.
+However, denoising attempts to remove errors and to provide more accurate results.
+There are two denoising methods available in QIIME2: DADA2 and deblur. Both methods output feature tables containing feature abundances and ASVs. 
+
+#### Denoising with DADA2
+
+Install dada2
+
+
+```{r eval=FALSE, include=TRUE}
+
+system("qiime dada2 denoise-single --help")
+system("qiime dada2 denoise-paired --help ")
+
+```
+
+
+```{r}
+
+system("qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs ./inputs/demux-yoga.qza  \
+  --p-trunc-len-f 204 \
+  --p-trunc-len-r 205 \
+  --o-representative-sequences ./dada2/rep-seqs_yoga_dada2.qza \
+  --o-table ./dada2/table_yoga_dada2.qza \
+  --o-denoising-stats ./dada2/stats_yoga_dada2.qza \
+  --verbose ")
+
+```
+
+#### Denoising with Deblur
+
+Prepare with merging data
+
+```{r eval=FALSE, include=TRUE}
+system("qiime vsearch merge-pairs \
+--i-demultiplexed-seqs ./inputs/demux-yoga.qza \
+--p-allowmergestagger \
+--o-merged-sequences ./inputs/demux-yoga-merged.qza \
+--o-unmerged-sequences ./inputs/demux-yoga-unmerged.qza")
+
+```
+
+Prepare with filtering data
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime quality-filter q-score \
+--i-demux ./inputs/demux-yoga-merged.qza \
+--o-filtered-sequences ./deblur/demux-yoga-merged-filtered.qza \
+--o-filter-stats ./deblur/demux-yoga-merged-filtered-stat.qza")
+
+```
+
+Denoising using deblur
+
+```{r eval=FALSE, include=TRUE}
+system("qiime deblur denoise-16S \
+  --i-demultiplexed-seqs ./deblur/demux-yoga-merged.qza \
+  --p-trim-length 120 \
+  --p-jobs-to-start 4 \
+  --p-sample-stats \
+  --o-representative-sequences ./deblur/rep-seqs_yoga_deblur.qza \
+  --o-table ./deblur/table_yoga_deblur.qza \
+  --o-stats ./deblur/stats_yoga_deblur.qza
+     ")
+
+```
+
+
+#### Visualizing the outputs
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime deblur visualize-stats \
+--i-deblur-stats ./deblur/stats_yoga_deblur.qza \
+--o-visualization ./deblur/stats_yoga_deblur.qzv")
+
+system("qiime tools view ./deblur/stats_yoga_deblur.qzv")
+
+```
+
+
+Create viz file
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools export --input-path ./deblur/stats_yoga_deblur.qzv --output-path ./deblur")
+
+```
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-table summarize \
+--i-table ./denovo/table-yoga-denovo.qza \
+--m-sample-metadata-file ./data/sample-metadata.tsv \
+--o-visualization ./denovo/table-yoga-denovo.qzv")
+system("qiime tools view ./denovo/table-yoga-denovo.qzv ")
+
+```
+
+#### creates a visualization file for the representative sequence artifact
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-table tabulate-seqs \
+--i-data ./deblur/rep-seqs_yoga_deblur.qza \
+--o-visualization ./deblur/rep-seqs_yoga_deblur.qzv")
+
+system("qiime tools view ./deblur/rep-seqs_yoga_deblur.qzv")
+
+```
+
+
+<iframe src="/Users/nnthieu/16sRna/denovo/q2_feature_table_summarize1.pdf" width="100%" height="450px"></iframe>
+
+
+<iframe src="/Users/nnthieu/16sRna/denovo/q2_feature_table_summarize2.pdf" width="100%" height="450px"></iframe>
+
+
+![](/Users/nnthieu/16sRna/deblur/p1.jpg){width="100%" height="450px"}
+#### Taxonomic Assignment with QIIME2
+
+Using Alignment-Based Classifiers
+
+Import reference sequences:
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools import \
+--type 'FeatureData[Sequence]' \
+--input-path /Users/nnthieu/genome_ref/gg13.8/gg_13_8_otus/rep_set/99_otus.fasta \
+--output-path ./taxonomy/99_otus.qza")
+
+system("qiime tools import \
+--type 'FeatureData[Taxonomy]' \
+--input-format HeaderlessTSVTaxonomyFormat \
+--input-path /Users/nnthieu/genome_ref/gg13.8/gg_13_8_otus/taxonomy/99_otu_taxonomy.txt \
+--output-path ./taxonomy/99_otu_taxonomy.qza
+       ")
+
+```
+
+run taxonomy classification using the BLAST-based classifier
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-classifier classify-consensus-blast \
+--i-query ./deblur/rep-seqs_yoga_deblur.qza \
+--i-reference-reads ./taxonomy/99_otus.qza \
+--i-reference-taxonomy ./taxonomy/99_otu_taxonomy.qza \
+--p-perc-identity 0.97 \
+--o-classification ./taxonomy/blast_tax_yoga_deblur.qza \
+--o-search-results ./taxonomy/blast_search_results.qza \
+--verbose")
+
+```
+
+
+use the VSEARCH-based method 
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-classifier classify-consensus-vsearch \
+--i-query ./deblur/rep-seqs_yoga_deblur.qza \
+--i-reference-reads ./taxonomy/99_otus.qza \
+--i-reference-taxonomy ./taxonomy/99_otu_taxonomy.qza \
+--p-perc-identity 0.97 \
+--o-classification ./taxonomy/vsearch_tax_yoga_deblur.qza \
+--o-search-results ./taxonomy/vsearch_search_results.qza \
+--verbose
+       ")
+
+```
+
+#### Using Machine Learning Classifiers
+
+Download reference sequences from qiime website.
+
+```{r eval=FALSE, include=TRUE}
+system("mkdir classifiers")
+
+system("wget -O "./classifiers/gg-nb-99-classifier.qza" \
+"https://data.qiime2.org/2021.11/common/gg-13-8-99-nb-classifier.qza" ")
+
+```
+
+Classifying
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-classifier classify-sklearn \
+--i-classifier ./classifiers/gg-nb-99-classifier.qza \
+--i-reads ./deblur/rep-seqs_yoga_deblur.qza \
+--o-classification ./taxonomy/nb_tax_yoga_deblur.qza ") 
+
+```
+
+## Visualizing the BLAST-based taxonomy assignment:
+
+Blast 
+
+```{r eval=FALSE, include=TRUE}
+system("qiime metadata tabulate \
+--m-input-file ./taxonomy/blast_tax_yoga_deblur.qza \
+--o-visualization ./taxonomy/blast_tax_yoga_deblur.qzv")
+
+system("qiime tools view ./taxonomy/blast_tax_yoga_deblur.qzv")
+
+```
+
+Vsearch
+
+```{r eval=FALSE, include=TRUE}
+system("qiime metadata tabulate \
+--m-input-file ./taxonomy/vsearch_tax_yoga_deblur.qza \
+--o-visualization ./taxonomy/vsearch_tax_yoga_deblur.qzv")
+
+sysytem("qiime tools view ./taxonomy/vsearch_tax_yoga_deblur.qzv")
+
+```
+
+#### Ploting
+
+```{r eval=FALSE, include=TRUE}
+system("qiime taxa barplot \
+--i-table ./deblur/table_yoga_deblur.qza \
+--i-taxonomy ./taxonomy/vsearch_tax_yoga_deblur.qza \
+--m-metadata-file ./sample-metadata.tsv \
+--o-visualization ./taxonomy/vsearch_tax_yoga_deblur_barplot.qzv")
+
+system("qiime tools view ./taxonomy/vsearch_tax_yoga_deblur_barplot.qzv")
+system("qiime tools export \
+  --input-path ./taxonomy/vsearch_tax_yoga_deblur_barplot.qzv \
+  --output-path ./taxonomy/vsearch_tax_yoga_deblur_barplot_exported")
+
+
+```
+
+
+#### Grouping samples 
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime feature-table group \
+--i-table ./deblur/table_yoga_deblur.qza \
+--p-axis sample \
+--m-metadata-file ./sample-metadata.tsv \
+--m-metadata-column group \
+--p-mode sum \
+--o-grouped-table ./taxonomy/groupedby-group-yoga-table.qza")
+
+```
+
+Ploting by groups
+
+```{r eval=FALSE, include=TRUE}
+system("qiime taxa barplot \
+--i-table ./taxonomy/groupedby-group-yoga-table.qza \
+--i-taxonomy ./taxonomy/vsearch_tax_yoga_deblur.qza \
+--m-metadata-file ./grouped-metadata.tsv \
+--o-visualization ./taxonomy/groupedby-group-yoga-barplot.qzv")
+
+system("qiime tools view ./taxonomy/groupedby-group-yoga-barplot.qzv")
+
+```
+
+View plot
+
+```{r eval=FALSE, include=TRUE}
+system("qiime tools export --input-path ./deblur/stats_yoga_deblur.qzv --output-path ./deblur")
+
+```
+
+## Construction of Phylogenetic Tree
+
+De novo Multiple Sequence Alignment
+
+```{r eval=FALSE, include=TRUE}
+system(" mkdir trees")
+
+system("qiime alignment mafft \
+--i-sequences ./deblur/rep-seqs_yoga_deblur.qza \
+--o-alignment ./trees/aligned-rep-seqs_yoga_deblur.qza")
+
+```
+
+
+De novo Masking Sites of Low Information
+
+```{r eval=FALSE, include=TRUE}
+system("qiime alignment mask \
+--i-alignment ./trees/aligned-rep-seqs_yoga_deblur.qza \
+--o-masked-alignment ./trees/masked-aligned-rep-seqs_yoga_deblur.qza")
+
+```
+
+Creating a Tree
+
+An unrooted tree is created from the aligned sequences using Fasttree that infers approxi-
+mately maximum-likelihood unrooted phylogenetic trees from the sequence alignments.
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime phylogeny fasttree \
+--i-alignment ./trees/masked-aligned-rep-seqs_yoga_deblur.qza \
+--o-tree ./trees/unrooted-denovoTr-tree.qza")
+
+```
+
+Midpoint Rooting
+Then, we can define the root of the phylogenetic tree as its midpoint.
+
+
+```{r eval=FALSE, include=TRUE}
+system("qiime phylogeny midpoint-root \
+--i-tree ./trees/unrooted-denovoTr-tree.qza \
+--o-rooted-tree ./trees/rooted-denovoTr-tree.qza ")
+
+```
+
+export phylogenetic tree data into NEWICK tree files
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime tools export \
+--input-path ./trees/unrooted-denovoTr-tree.qza \
+--output-path ./trees/unrooted")
+
+system("qiime tools export \
+--input-path ./trees/rooted-denovoTr-tree.qza \
+--output-path ./trees/rooted")
+
+```
+
+Fragment-Insertion Phylogenetic Tree
+creates unrooted tree and rooted tree and export them to NEWICK files
+
+```{r eval=FALSE, include=TRUE}
+system(" mkdir trees2")
+system(" qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences ./deblur/rep-seqs_yoga_deblur.qza \
+--o-alignment ./trees2/rep-seqs_yoga_deblur_alignedTr.qza \
+--o-masked-alignment ./trees2/rep-seqs_yoga_deblur_maskedTr.qza \
+--o-tree ./trees2/unrooted-tree-yoga_deblur.qza \
+--o-rooted-tree ./trees2/rooted-tree-yoga_deblur.qza")
+
+system(" qiime tools export \
+--input-path ./trees2/unrooted-tree-yoga_deblur.qza \
+--output-path ./trees2/unrooted")
+
+system(" qiime tools export \
+--input-path ./trees2/rooted-tree-yoga_deblur.qza \
+--output-path ./trees2/rooted")
+
+```
+
+Alpha and Beta Diversity Analysis
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime feature-table summarize \
+--i-table ./deblur/table_yoga_deblur.qza \
+--o-visualization ./deblur/table_feat_sample_freq_filtered_yoga_deblur.qzv \
+--m-sample-metadata-file ./sample-metadata.tsv")
+
+system(" qiime tools view ./deblur/table_feat_sample_freq_filtered_yoga_deblur.qzv")
+
+```
+
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime diversity core-metrics-phylogenetic \
+--i-phylogeny ./trees2/rooted-tree-yoga_deblur.qza \
+--i-table ./deblur/table_yoga_deblur.qza \
+--p-sampling-depth 955 \
+--m-metadata-file ./sample-metadata.tsv \
+--output-dir diversity-indices")
+
+```
+
+
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime diversity alpha-group-significance \
+--i-alpha-diversity ./diversity-indices/faith_pd_vector.qza \
+--m-metadata-file ./sample-metadata.tsv \
+--o-visualization ./diversity-indices/faith-pd-group-significance.qzv")
+system("qiime tools view ./diversity-indices/faith-pd-group-significance.qzv")
+
+system("qiime diversity alpha-group-significance \
+--i-alpha-diversity ./diversity-indices/shannon_vector.qza \
+--m-metadata-file ./sample-metadata.tsv \
+--o-visualization ./diversity-indices/shannon-group-significance.qzv")
+
+system("qiime tools view ./diversity-indices/shannon-group-significance.qzv")
+
+```
+
+PERMANOVA to test for significant differences of the weighted UniFrac metrics between the samples
+
+
+```{r eval=FALSE, include=TRUE}
+system(" qiime diversity beta-group-significance \
+--i-distance-matrix ./diversity-indices/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file ./sample-metadata.tsv \
+--m-metadata-column group \
+--o-visualization \
+./diversity-indices/weighted-unifrac-life-stage-significance.qzv \
+--p-pairwise ")
+system(" qiime tools view \
+./diversity-indices/weighted-unifrac-life-stage-significance.qzv")
+
+```
+
+
+
+```{r eval=FALSE, include=TRUE}
+system(" ")
+
+```
+

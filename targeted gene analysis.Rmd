@@ -1,0 +1,80 @@
+---
+title: "Targed Gene Analysis"
+author: "Thieu Nguyen"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data 
+
+in 'data' directoty:
+
+./ERR2247316_1.fastq	./ERR2247337_2.fastq	./ERR2247359_1.fastq	./ERR2247380_2.fastq
+./ERR2247316_2.fastq	./ERR2247338_1.fastq	./ERR2247359_2.fastq	./ERR2247381_1.fastq
+./ERR2247317_1.fastq	./ERR2247338_2.fastq	./ERR2247360_1.fastq	./ERR2247381_2.fastq
+
+#### Convert these fastq files into fasta files
+
+```{r eval=FALSE, include=TRUE}
+system("for file in ./data/*.fastq; do
+    seqtk seq -A "$file" > "${file%.fastq}.fasta"
+done
+")
+```
+
+```{r eval=FALSE, include=TRUE}
+cat ./*.fasta > ./all_sequences.fasta
+
+```
+
+
+```{r}
+library(ape)
+library(primerTree)
+library(Biostrings)
+# Read the sequences from FASTA
+msa <- read.dna("/Users/nnthieu/targetedgene/data/all_sequences.fasta", format = "fasta")
+
+# Create a multiple sequence alignment object from the alignment file
+dna <- DNAStringSet(msa)
+
+# Design primers
+primers <- DesignPrimers(dna, numPrimers = 2)
+
+# Print designed primers
+print(primers)
+
+
+```
+
+
+```{r }
+# Load necessary libraries
+
+library(primerTree)
+library(Biostrings)
+
+# Create a multiple sequence alignment object from the alignment file
+
+dna <- DNAStringSet(msa)
+
+# Design primers
+primers <- DesignPrimers(dna, numPrimers = 2)
+
+# Print designed primers
+print(primers)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r }
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
