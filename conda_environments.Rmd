@@ -1,0 +1,116 @@
+---
+title: "Virtual Environments for Bioinformatics"
+author: "Thieu Nguyen"
+date: "2024-11-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Conda is prefered to pip to work with bioinformatic projects. Conda can be installed from website of anaconda.
+
+```{r}
+system("brew cleanup")
+system("brew upgrade")
+system("brew doctor")
+
+```
+
+#### Update conda
+
+```{r eval=FALSE, include=TRUE}
+system("conda update -n base -c defaults conda")
+
+```
+
+Before create conda environments, I need to check if python and pip in the same path.
+
+```{r eval=FALSE, include=TRUE}
+system("which python")
+system("which pip")
+```
+
+In the case, they are not in the same path, I can be fixed by:
+
+
+```{r eval=FALSE, include=TRUE}
+system("nano ~/.zshrc")
+
+```
+
+Then add:
+
+alias python='/usr/local/bin/python3.13'
+alias pip='/usr/local/bin/python3.13 -m pip'
+
+then save it
+
+```{r eval=FALSE, include=TRUE}
+system("source ~/.zshrc ")
+
+```
+ #### Update conda
+ 
+```{r eval=FALSE, include=TRUE}
+system("conda update conda")
+```
+ 
+
+## Create a coda environment
+
+Some python or other packages can not be installed with somw versions of python, so It needs to create conda environments to work with the version of packages. EX, qiime2 can not be installed in conda environments with python 3.13.0. So, I create a conda environment for python 3.12.0
+
+```{r eval=FALSE, include=TRUE}
+system("conda create --name bioenv python=3.12")
+
+```
+
+#### Activate a conda environment
+
+
+```{r eval=FALSE, include=TRUE}
+system("conda activate bioenv")
+
+```
+
+#### Check all conda environments installed.
+
+```{r eval=FALSE, include=TRUE}
+system("conda info --envs")
+```
+
+#### qiime2
+
+For Amplicon distribution and MacOS
+
+```{r eval=FALSE, include=TRUE}
+system("conda env create -n qiime2-amplicon-2024.10 --file https://data.qiime2.org/distro/amplicon/qiime2-amplicon-2024.10-py310-osx-conda.yml")
+```
+
+For Metagenome Distribution
+
+```{r eval=FALSE, include=TRUE}
+system("conda env create -n qiime2-metagenome-2024.10 --file https://data.qiime2.org/distro/metagenome/qiime2-metagenome-2024.10-py310-osx-conda.yml")
+```
+
+For Tiny distribution
+
+```{r eval=FALSE, include=TRUE}
+system("conda env create -n qiime2-tiny-2024.10 --file https://data.qiime2.org/distro/tiny/qiime2-tiny-2024.10-py310-osx-conda.yml")
+```
+
+Activate environment
+
+```{r  eval=FALSE, include=TRUE}
+system("conda activate qiime2-tiny-2024.10")
+```
+
+
+
+
+
+

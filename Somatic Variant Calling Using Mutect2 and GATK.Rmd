@@ -1,0 +1,333 @@
+---
+title: "Somatic Variant Calling Using Mutect2 and GATK"
+author: "Thieu Nguyen"
+date: "11/4/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Data
+
+In this post I use fastq.gz files from normal duodenal tissue:
+
+HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R1.fastq.gz, and
+
+HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R2.fastq.gz
+
+and tumour sample of pancrease:
+
+HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R1.fastq.gz, and
+
+HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R2.fastq.gz
+
+
+```{r eval=FALSE, include=TRUE}
+system("cd ../reads")
+
+# N-D (Normal Duodenal tissue)
+system("wget https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data_somatic/HG008/Liss_lab/NYGC_Illumina-WGS_20231023/HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R1.fastq.gz")
+
+system("wget https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data_somatic/HG008/Liss_lab/NYGC_Illumina-WGS_20231023/HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R2.fastq.gz")
+
+# T (Pancreatic Ductal Adenocarcinoma Cell Line (PDAC))
+
+system("wget https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data_somatic/HG008/Liss_lab/NYGC_Illumina-WGS_20231023/HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R1.fastq.gz")
+
+system("wget https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data_somatic/HG008/Liss_lab/NYGC_Illumina-WGS_20231023/HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R2.fastq.gz")
+
+```
+
+#### Subsetting 1,000,000 reads from each fastq
+
+For saving store space:
+
+```{r eval=FALSE, include=TRUE}
+
+system("seqtk sample -s100 HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R1.fastq.gz 1000000 > HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R1.fastq")
+
+system("seqtk sample -s100 HG008-N-D_CGGACAAC-AATCCGGA_H3LLJDSXC_L001_001.R2.fastq.gz 1000000 > HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R2.fastq")
+
+system("seqtk sample -s100 HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R1.fastq.gz 1000000 > HG008-T_TTCCTGTT-AAGATACT_subset_HJVY2DSX7_L001_001.R1.fastq")
+
+system("seqtk sample -s100 HG008-T_TTCCTGTT-AAGATACT_HJVY2DSX7_L001_001.R2.fastq.gz 1000000 > HG008-T_TTCCTGTT-AAGATACT_subset_HJVY2DSX7_L001_001.R2.fastq")
+
+```
+
+#### Download reference data
+
+```{r eval=FALSE, include=TRUE}
+# download reference files
+system("wget -P /Users/nnthieu/somaticgenome/hg38/https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz")
+
+system("gunzip /Users/nnthieu/somaticgenome/hg38/hg38.fa.gz")
+
+# index ref - .fai file before running haplotype caller
+system("samtools faidx /Users/nnthieu/somaticgenome/hg38/hg38.fa")
+
+
+# ref dict - .dict file before running haplotype caller
+system("gatk CreateSequenceDictionary R=/Users/nnthieu/somaticgenome/hg38/hg38.fa O=/Users/nnthieu/somaticgenome/hg38/hg38.dict")
+
+
+# download known sites files for BQSR from GATK resource bundle
+system("wget -P /Users/nnthieu/somaticgenome/hg38/ https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf")
+
+system("wget -P /Users/nnthieu/somaticgenome/hg38/ https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf.idx")
+
+```
+
+
+Set directories path
+
+ref=/Users/nnthieu/somaticgenome/hg38/hg38.fa
+
+known_sites=/Users/nnthieu/somaticgenome/hg38/Homo_sapiens_assembly38.dbsnp138.vcf
+
+project_dir=/Users/nnthieu/somaticgenome
+
+aligned_reads=$project_dir/aligned
+
+reads=$project_dir/reads
+
+results=$project_dir/results
+
+gatk_path=/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk
+
+mutect2_supporting_files=/Users/nnthieu/somaticgenome/hg38/mutect2_supporting_files
+
+
+## 2. Run fastQC
+
+```{r eval=FALSE, include=TRUE}
+system("fastqc ${reads}/HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R1.fastq.gz -o ${reads}/")
+
+system("fastqc ${reads}/HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R2.fastq.gz -o ${reads}/")
+
+```
+
+ No trimming required, quality looks okay.
+
+
+## 3. Map to reference using BWA-MEM
+
+#### BWA index reference 
+
+ref=/Users/nnthieu/somaticgenome/hg38/hg38.fa
+
+```{r eval=FALSE, include=TRUE}
+system("bwa index ${ref}")
+```
+
+#### BWA alignment
+
+```{r eval=FALSE, include=TRUE}
+# BWA alignment
+system("bwa mem -t 4 -R "@RG\tID:HG008-N-D\tPL:ILLUMINA\tSM:HG008-N-D" ${ref} ${reads}/HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R1.fastq.gz ${reads}/HG008-N-D_CGGACAAC-AATCCGGA_subset_H3LLJDSXC_L001_001.R2.fastq.gz > ${aligned_reads}/HG008-N-D.paired.sam")
+
+system("bwa mem -t 4 -R "@RG\tID:HG008-T\tPL:ILLUMINA\tSM:HG008-T" ${ref} ${reads}/HG008-T_TTCCTGTT-AAGATACT_subset_HJVY2DSX7_L001_001.R1.fastq.gz ${reads}/HG008-T_TTCCTGTT-AAGATACT_subset_HJVY2DSX7_L001_001.R2.fastq.gz > ${aligned_reads}/HG008-T.paired.sam")
+
+```
+
+
+#### Mark Duplicates and Sort - GATK4
+
+```{r eval=FALSE, include=TRUE}
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk MarkDuplicatesSpark -I ${aligned_reads}/HG008-T.paired.sam -O ${aligned_reads}/HG008-T_sorted_dedup_reads.bam")
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk MarkDuplicatesSpark -I ${aligned_reads}/HG008-N-D.paired.sam -O ${aligned_reads}/HG008-N-D_sorted_dedup_reads.bam")
+
+```
+
+
+#### Base quality recalibration
+
+Build a model
+
+```{r eval=FALSE, include=TRUE}
+# 1. build the model
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk BaseRecalibrator -I ${aligned_reads}/HG008-N-D_sorted_dedup_reads.bam -R ${ref} --known-sites ${known_sites} -O ${aligned_reads}/HG008-N-D_recal_data.table")
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk BaseRecalibrator -I ${aligned_reads}/HG008-T_sorted_dedup_reads.bam -R ${ref} --known-sites ${known_sites} -O ${aligned_reads}/HG008-T_recal_data.table
+")
+```
+
+Apply the model to adjust the base quality scores
+
+```{r eval=FALSE, include=TRUE}
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk ApplyBQSR -I ${aligned_reads}/HG008-N-D_sorted_dedup_reads.bam -R ${ref} --bqsr-recal-file ${aligned_reads}/HG008-N-D_recal_data.table -O ${aligned_reads}/HG008-N-D_sorted_dedup_bqsr_reads.bam")
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk ApplyBQSR -I ${aligned_reads}/HG008-T_sorted_dedup_reads.bam -R ${ref} --bqsr-recal-file ${aligned_reads}/HG008-T_recal_data.table -O ${aligned_reads}/HG008-T_sorted_dedup_bqsr_reads.bam")
+
+```
+
+#### Collect Alignment & Insert Size Metrics
+
+For normal duodenal tissue sample
+
+```{r eval=FALSE, include=TRUE}
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk CollectAlignmentSummaryMetrics R=${ref} I=${aligned_reads}/HG008-N-D_sorted_dedup_bqsr_reads.bam  O=${aligned_reads}/HG008-N-D_alignment_metrics.txt")
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk CollectInsertSizeMetrics INPUT=${aligned_reads}/HG008-N-D_sorted_dedup_bqsr_reads.bam OUTPUT=${aligned_reads}/HG008-N-D_insert_size_metrics.txt HISTOGRAM_FILE=${aligned_reads}/HG008-N-D_insert_size_histogram.pdf")
+
+```
+
+![](/Users/nnthieu/somaticgenome/p2.jpg){width=60% height=500px}
+
+
+For pancrease tumour sample
+
+```{r eval=FALSE, include=TRUE}
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk CollectAlignmentSummaryMetrics R=${ref} I=${aligned_reads}/HG008-T_sorted_dedup_bqsr_reads.bam  O=${aligned_reads}/HG008-T_alignment_metrics.txt") 
+
+system("/Users/nnthieu/Downloads/gatk-4.6.0.0/gatk CollectInsertSizeMetrics INPUT=${aligned_reads}/HG008-T_sorted_dedup_bqsr_reads.bam OUTPUT=${aligned_reads}/HG008-T_insert_size_metrics.txt HISTOGRAM_FILE=${aligned_reads}/HG008-T_insert_size_histogram.pdf")
+
+      
+```
+
+![](/Users/nnthieu/somaticgenome/p1.jpg){width=60% height=500px}
+
+## 4. Variant calling using Mutect2
+
+#### Download Mutect2 files 
+
+```{r eval=FALSE, include=TRUE}
+# gnomAD
+
+system("wget https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/somatic-hg38/af-only-gnomad.hg38.vcf.gz /Users/nnthieu/somaticgenome/hg38/mutect2_supporting_files")
+
+system("wget https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/somatic-hg38/af-only-gnomad.hg38.vcf.gz.tbi /Users/nnthieu/somaticgenome/hg38/mutect2_supporting_files
+")
+
+# PoN
+
+system("wget https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz /Users/nnthieu/somaticgenome/hg38/mutect2_supporting_files")
+
+system("wget https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz.tbi /Users/nnthieu/somaticgenome/hg38/mutect2_supporting_files")
+
+```
+
+#### Call Somatic Variants - Using Mutect2 
+
+(https://gatk.broadinstitute.org/hc/en-us/articles/360035531132--How-to-Call-somatic-mutations-using-GATK4-Mutect2)
+
+```{r eval=FALSE, include=TRUE}
+system("
+${gatk_path} Mutect2 -R ${ref} \
+    -I ${aligned_reads}/HG008-T_sorted_dedup_bqsr_reads.bam \
+    -I ${aligned_reads}/HG008-N-D_sorted_dedup_bqsr_reads.bam \
+    -tumor HG008-T \
+    -normal HG008-N-D \
+    --germline-resource ${mutect2_supporting_files}/af-only-gnomad.hg38.vcf.gz \
+    --panel-of-normals ${mutect2_supporting_files}/1000g_pon.hg38.vcf.gz \
+    -O ${results}/HG008_somatic_variants_mutect2.vcf.gz \
+    --f1r2-tar-gz ${results}/HG008_f1r2.tar.gz \
+       ")
+```
+
+
+#### Estimate cross-sample contamination
+
+GetPileupSummaries
+Summarizes counts of reads that support reference, alternate and other alleles for given sites. Results are used with CalculateContamination.
+
+Intervals: 
+
+```{r eval=FALSE, include=TRUE}
+system("wget https://storage.googleapis.com/gcp-public-data--broad-references/hg38/v0/exome_calling_regions.v1.1.interval_list -P ${mutect2_supporting_files}/ ")
+```
+
+
+For tumour sample
+
+```{r eval=FALSE, include=TRUE}
+system("
+${gatk_path} GetPileupSummaries \
+   --java-options '-Xmx50G' --tmp-dir ${project_dir}/tmp/ \
+   -I ${aligned_reads}/HG008-T_sorted_dedup_bqsr_reads.bam \
+   -V ${mutect2_supporting_files}/af-only-gnomad.hg38.vcf.gz \
+   -L ${mutect2_supporting_files}/exome_calling_regions.v1.1.interval_list \
+   -O ${results}/HG008_T_getpileupsummaries.table
+       ")
+```
+
+For normal sample
+
+```{r eval=FALSE, include=TRUE}
+system("
+${gatk_path} GetPileupSummaries \
+   --java-options '-Xmx50G' --tmp-dir ${project_dir}/tmp/ \
+   -I ${aligned_reads}/HG008-N-D_sorted_dedup_bqsr_reads.bam  \
+   -V ${mutect2_supporting_files}/af-only-gnomad.hg38.vcf.gz \
+   -L ${mutect2_supporting_files}/exome_calling_regions.v1.1.interval_list \
+   -O ${results}/HG008-N-D_getpileupsummaries.table       
+       ")
+```
+
+Calculate contamination
+
+```{r eval=FALSE, include=TRUE}
+system("
+${gatk_path} CalculateContamination \
+   -I ${results}/HG008_T_getpileupsummaries.table \
+   -matched ${results}/HG008-N-D_getpileupsummaries.table \
+   -O ${results}/HG008_pair_calculatecontamination.table 
+")
+
+```
+
+
+#### Estimate read orientation artifacts
+
+```{r eval=FALSE, include=TRUE}
+# read orientation
+system("
+${gatk_path} LearnReadOrientationModel \
+   -I ${results}/HG008_f1r2.tar.gz \
+   -O ${results}/read-orientation-model.tar.gz
+")
+```
+
+
+#### Filter Variants Called By Mutect2
+
+```{r eval=FALSE, include=TRUE}
+system("
+${gatk_path} FilterMutectCalls \
+   -V ${results}/HG008_somatic_variants_mutect2.vcf.gz \
+   -R ${ref} \
+   --contamination-table ${results}/HG008_pair_calculatecontamination.table \
+   --ob-priors ${results}/read-orientation-model.tar.gz \
+   -O ${results}/HG008_somatic_variants_filtered_mutect2.vcf       
+       ")
+```
+
+#### Annotate Variants - Funcotator
+
+reference: https://console.cloud.google.com/storage/browser/broad-public-datasets/funcotator;tab=objects?prefix=&forceOnObjectsSortingFiltering=false
+
+```{r eval=FALSE, include=TRUE}
+# Annotate using Funcotator
+system("
+${gatk_path} Funcotator \
+   --variant ${results}/HG008_somatic_variants_filtered_mutect2.vcf \
+   --reference ${ref} \
+   --ref-version hg38 \
+   --data-sources-path /Users/nnthieu/somaticgenome/funcotator/functotator_prepackaged_sources/funcotator/hg38/funcotator_dataSources.v1.8.hg38.20230908s \
+   --output ${results}/HG008_somatic_variants_functotated.vcf \
+   --output-file-format VCF
+")
+```
+
+
+#---------
+
+
+
+
+
+

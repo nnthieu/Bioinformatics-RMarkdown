@@ -1,0 +1,182 @@
+---
+title: "R Packages for Bioinformatics"
+author: "Thieu Nguyen"
+date: "11/19/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+R 4.4.3 is needed
+
+Reference:
+https://compgenomr.github.io/book/software-information-and-conventions.html#packages-needed-to-run-the-book-code
+
+## 1. Core Bioconductor and dependencies packages
+
+
+```{r  eval=FALSE, include=TRUE}
+
+install.packages("BiocManager")
+# install bioconductor package "rtracklayer"
+BiocManager::install("rtracklayer")
+
+install.packages(c("tidyverse", "snpStats", "knitr", "tidyr", "data.table" ))
+
+# dependencies
+install.packages(c("Matrix", "dotCall64", "spam", "spatstat.random", "deldir", 
+                   "SeuratObject", "RSpectra", "spatstat.explore", 
+                   "spatstat.geom", "uwot", "RcppEigen"))
+
+```
+
+
+## 2. Packages for Genomic Data Analysis
+
+You can also embed plots, for example:
+
+```{r eval=FALSE, include=TRUE }
+# For working with genomic ranges and sequences
+BiocManager::install(c("GenomicRanges", "Biostrings", "BSgenome"))
+
+# For working with and annotating genomes
+BiocManager::install(c("AnnotationDbi", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg38.knownGene", "TxDb.Hsapiens.UCSC.hg19.knownGene"))
+
+# For analyzing high-throughput sequencing data
+BiocManager::install(c("Rsamtools", "Rsubread", "GenomicAlignments", "ShortRead"))
+
+# For handling single-cell data
+BiocManager::install(c("SingleCellExperiment", "scran", "scater", "Seurat", "loomR"))
+
+```
+
+
+## 3. Packages for RNA-Seq Analysis
+
+```{r eval=FALSE, include=TRUE}
+# For differential expression analysis
+BiocManager::install(c("DESeq2", "edgeR", "limma"))
+
+# For transcript assembly and quantification
+BiocManager::install("ballgown")
+
+# For visualization of RNA-Seq data
+BiocManager::install(c("pheatmap", "EnhancedVolcano"))
+
+```
+
+
+## 4. Epigenetics and Methylation Analysis
+
+```{r eval=FALSE, include=TRUE}
+# Variant annotation and visualization
+BiocManager::install(c("VariantAnnotation", "SNPRelate", "vcfR"))
+
+# Tools for structural variation
+BiocManager::install("StructuralVariantAnnotation")
+
+```
+
+## 5. Variant Analysis
+
+```{r eval=FALSE, include=TRUE}
+# Variant annotation and visualization
+BiocManager::install(c("VariantAnnotation", "SNPRelate"))
+
+# Tools for structural variation
+BiocManager::install("StructuralVariantAnnotation")
+
+```
+
+
+## 6. Functional Annotation
+
+```{r eval=FALSE, include=TRUE}
+# General plotting tools
+install.packages(c("cowplot", "ggpubr"))
+
+```
+
+## 8. Single-Cell Analysis
+
+```{r eval=FALSE, include=TRUE}
+# Analysis and visualization
+BiocManager::install(c("SingleR", "scRNAseq"))
+
+```
+
+Seurat and loomR
+
+```{r eval=FALSE, include=TRUE}
+# Workflow and pipeline tools
+BiocManager::install("BiocParallel")
+BiocManager::install(SeuratObject")
+
+remotes::install_version(package = 'Seurat', version = package_version('5.1.0'))
+
+# Install devtools from CRAN
+install.packages("devtools")
+
+# Use devtools to install hdf5r and loomR from GitHub
+devtools::install_github("hadley/stringr")
+devtools::install_github(repo = "hhoeflin/hdf5r")
+devtools::install_github(repo = "mojaveazure/loomR", ref = "develop")
+
+```
+
+## 9. Machine Learning and Data Processing
+
+```{r eval=FALSE, include=TRUE}
+# Machine learning frameworks
+install.packages(c("caret", "randomForest"))
+
+```
+
+## 10. Other Utilities
+
+```{r eval=FALSE, include=TRUE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install(c('qvalue','plot3D',
+                      'cluster', 'NbClust', 'fastICA', 'NMF','matrixStats',
+                      'Rtsne', 'mosaic', 'genomation',
+                      'ggbio', 'Gviz',  'RUVSeq',
+                      'gProfileR', 'ggfortify', 'corrplot',
+                      'gage', 'EDASeq', 'citr', 'formatR',
+                      'svglite', 'Rqc', 'ShortRead', 'QuasR',
+                      'methylKit','FactoMineR', 'iClusterPlus',
+                      'enrichR','xgboost','glmnet',
+                      'DALEX','kernlab','pROC','nnet','RANN',
+                      'ranger','GenomeInfoDb', 
+                      'ComplexHeatmap', 'circlize', 
+                      'rtracklayer', 'BSgenome.Hsapiens.UCSC.hg38',
+                      'BSgenome.Hsapiens.UCSC.hg19',
+                      'AnnotationHub', 'GenomicFeatures', 'normr',
+                      'MotifDb', 'TFBSTools', 'rGADEM', 'JASPAR2018'
+                     ))
+```
+
+
+```{r eval=FALSE, include=TRUE}
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes") }
+remotes::install_github("mojaveazure/seurat-disk")
+```
+
+ChIP Seq
+
+```{r eval=FALSE, include=TRUE}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("clusterProfiler", force = TRUE)
+BiocManager::install("ChIPseeker")
+BiocManager::install("EnsDb.Hsapiens.v75")
+
+
+```
+
+
